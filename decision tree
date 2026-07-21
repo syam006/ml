@@ -1,0 +1,124 @@
+import numpy as np
+import pandas as pd
+df = pd.read_csv("data.csv")
+
+Cl = "Buys"
+
+Att = df.columns.tolist()
+Att.remove("RID")
+Att.remove(Cl)
+
+def Entropy(df, Cl):
+    n = len(df)
+    E = 0
+    for i in df[Cl].unique():
+        k = len(df[df[Cl] == i])
+        p = k / n
+        E -= p * (np.log2(p))
+    return E
+
+def SubEntropy(df, Cl, Att):
+    n = len(df)
+    ans = 0
+    for i in df[Att].unique():
+        dff = df[df[Att] == i]
+        ans += (len(dff)/n) * Entropy(dff, Cl)
+    return ans
+
+def IG(df, Cl, Att):
+    return Entropy(df, Cl) - SubEntropy(df, Cl, Att)
+
+def SplitInfo(df, Att):
+    n = len(df)
+    SI = 0
+    for i in df[Att].unique():
+        k = len(df[df[Att] == i])
+        p = k / n
+        SI -= p * np.log2(p)
+    return SI
+
+def GainRatio(df, Cl, Att):
+    si = SplitInfo(df, Att)
+    if si == 0:
+        return 0
+    return IG(df, Cl, Att) / si
+
+def Gini(df, Cl):
+    n = len(df)
+    g = 1
+    for i in df[Cl].unique():
+        k = len(df[df[Cl] == i])
+        p = k / n
+        g -= p ** 2
+    return g
+
+def WGini(df, Cl, Att):
+    n = len(df)
+    ans = 0
+    for i in df[Att].unique():
+        dff = df[df[Att] == i]
+        ans += (len(dff)/n) * Gini(dff, Cl)
+    return ans
+
+def Selection(df, Cl, Att, mode):
+    best = ""
+    if mode == "GINI":
+        value = 100
+    else:
+        value = -1
+    for i in Att:
+        if mode == "IG":
+            x = IG(df, Cl, i)
+            if x > value:
+                value = x
+                best = i
+        elif mode == "GR":
+            x = GainRatio(df, Cl, i)
+            if x > value:
+                value = x
+                best = i
+        elif mode == "GINI":
+            x = WGini(df, Cl, i)
+            if x < value:
+                value = x
+                best = i
+    return best
+
+def DecisionTree(df, Cl, Att, mode):
+    if len(df[Cl].unique()) == 1:
+        return df[Cl].iloc[0]
+    if len(Att) == 0:
+        return df[Cl].mode()[0]
+    head = Selection(df, Cl, Att, mode)
+    tree = {head:{}}
+    newAtt = Att.copy()
+    newAtt.remove(head)
+    for value in df[head].unique():
+        dff = df[df[head] == value]
+        tree[head][value] = DecisionTree(dff, Cl, newAtt, mode)
+    return tree
+def printTree(tree, level=0):
+    if not isinstance(tree, dict):
+        print("   " * level + "->", tree)
+        return
+    for node in tree:
+        print("   " * level + node)
+        for value in tree[node]:
+            print("   " * (level+1) + "[" + str(value) + "]")
+            printTree(tree[node][value], level+2)
+
+print("\nEntropy =", Entropy(df, Cl))
+print("\nAttribute Measures\n")
+for i in Att:
+    print(i)
+    print("Information Gain :", round(IG(df, Cl, i),4))
+    print("Gain Ratio       :", round(GainRatio(df, Cl, i),4))
+    print("Gini Index       :", round(WGini(df, Cl, i),4))
+    print()
+
+mode = "IG"
+# mode = "GR"
+# mode = "GINI"
+tree = DecisionTree(df, Cl, Att, mode)
+print("\nDecision Tree\n")
+printTree(tree)
